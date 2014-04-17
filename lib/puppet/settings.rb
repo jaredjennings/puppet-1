@@ -13,6 +13,7 @@ class Puppet::Settings
   require 'puppet/settings/enum_setting'
   require 'puppet/settings/file_setting'
   require 'puppet/settings/directory_setting'
+  require 'puppet/settings/digest_algorithms_setting'
   require 'puppet/settings/file_or_directory_setting'
   require 'puppet/settings/path_setting'
   require 'puppet/settings/boolean_setting'
@@ -649,6 +650,7 @@ class Puppet::Settings
       :string     => StringSetting,
       :file       => FileSetting,
       :directory  => DirectorySetting,
+      :file_checksum_algorithms => FileChecksumAlgorithmsSetting,
       :file_or_directory => FileOrDirectorySetting,
       :path       => PathSetting,
       :boolean    => BooleanSetting,

@@ -688,6 +688,16 @@ EOT
       :type     => :duration,
       :desc     => "The window of time leading up to a certificate's expiration that a notification
         will be logged. This applies to CA, master, and agent certificates. #{AS_DURATION}"
+    },
+    :digest_algorithms => {
+      :default => 'sha256, md5',
+      :type => :digest_algorithms,
+      :desc     => "A comma-separated list of digest algorithms to use for
+                    file resources and the filebucket. When files are placed
+                    into the bucket, all listed algorithms are used; when
+                    they are retrieved, an attempt is made to do so using
+                    each algorithm listed here, in order. For other operations,
+                    the first listed algorithm that works is used.",
     }
   )
 
