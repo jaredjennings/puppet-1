@@ -1,13 +1,13 @@
 require 'puppet/file_bucket'
 require 'puppet/indirector'
 require 'puppet/util/checksums'
-require 'digest/md5'
 require 'stringio'
 
 class Puppet::FileBucket::File
   # This class handles the abstract notion of a file in a filebucket.
   # There are mechanisms to save and load this file locally and remotely in puppet/indirector/filebucketfile/*
   # There is a compatibility class that emulates pre-indirector filebuckets in Puppet::FileBucket::Dipper
+  include Puppet::Util::Checksums
   extend Puppet::Indirector
   indirects :file_bucket_file, :terminus_class => :selector
 
@@ -28,10 +28,12 @@ class Puppet::FileBucket::File
   end
 
   def initialize(contents, options = {})
+    Puppet.settings.use :main
     raise ArgumentError.new("contents must be a String, got a #{contents.class}") unless contents.is_a?(String)
     @contents = contents
 
     @bucket_path = options.delete(:bucket_path)
+    Puppet.settings.use(:main)
     raise ArgumentError.new("Unknown option(s): #{options.keys.join(', ')}") unless options.empty?
   end
 
@@ -46,7 +48,7 @@ class Puppet::FileBucket::File
   end
 
   def checksum_type
-    'md5'
+    Puppet[:digest_algorithms][0]
   end
 
   def checksum
@@ -54,7 +56,13 @@ class Puppet::FileBucket::File
   end
 
   def checksum_data
-    @checksum_data ||= Digest::MD5.hexdigest(contents)
+    @checksum_data ||= method(checksum_type).call(contents)
+  end
+
+  def checksum_datas
+    @checksum_datas ||= Puppet[:digest_algorithms].collect do |algo|
+      method(algo).call(contents)
+    end
   end
 
   def to_s

@@ -9,6 +9,10 @@ module Puppet::FileBucketFile
 
     desc "Store files in a directory set based on their checksums."
 
+    def initialize
+      Puppet.settings.use(:main)
+    end
+
     def find(request)
       checksum, files_original_path = request_to_checksum_and_path(request)
       contents_file = path_for(request.options[:bucket_path], checksum, 'contents')
@@ -39,10 +43,11 @@ module Puppet::FileBucketFile
     def save(request)
       instance = request.instance
       _, files_original_path = request_to_checksum_and_path(request)
-      contents_file = path_for(instance.bucket_path, instance.checksum_data, 'contents')
-      paths_file = path_for(instance.bucket_path, instance.checksum_data, 'paths')
-
-      save_to_disk(instance, files_original_path, contents_file, paths_file)
+      instance.checksum_datas.each do |cksd|
+        contents_file = path_for(instance.bucket_path, cksd, 'contents')
+        paths_file = path_for(instance.bucket_path, cksd, 'paths')
+        save_to_disk(instance, files_original_path, contents_file, paths_file)
+      end
 
       # don't echo the request content back to the agent
       model.new('')
@@ -104,8 +109,9 @@ module Puppet::FileBucketFile
       if path == '' # Treat "md5/<checksum>/" like "md5/<checksum>"
         path = nil
       end
-      raise "Unsupported checksum type #{checksum_type.inspect}" if checksum_type != 'md5'
-      raise "Invalid checksum #{checksum.inspect}" if checksum !~ /^[0-9a-f]{32}$/
+      raise ArgumentError, "Unsupported checksum type #{checksum_type.inspect}" if not Puppet[:digest_algorithms].member? checksum_type.intern
+      checksum_lengths = Puppet[:digest_algorithms].collect { |a| method(a.to_s + "_hex_length").call }
+      raise "Invalid checksum #{checksum.inspect}" if not checksum_lengths.any? {|length| checksum =~ /^[0-9a-f]{#{length}}$/ }
       [checksum, path]
     end
 

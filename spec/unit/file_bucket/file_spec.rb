@@ -14,6 +14,12 @@ describe Puppet::FileBucket::File do
   # this is the default from spec_helper, but it keeps getting reset at odd times
   let(:bucketdir) { Puppet[:bucketdir] = tmpdir('bucket') }
   let(:destdir) { File.join(bucketdir, "8/b/3/7/0/2/a/d/#{digest}") }
+  let(:sha1digest) { "8b1ab916151c0e1c2fedd3380e1d5c427e7d3924" }
+  let(:sha1checksum) { "{sha1}#{sha1digest}" }
+  let(:sha1destdir) { File.join(bucketdir, "8/b/1/a/b/9/1/6/#{sha1digest}") }
+  let(:sha256digest) { "7152323bbca95871b2090190e80a02e05d7f164df9c4c3f543f6ff63dd817523" }
+  let(:sha256checksum) { "{sha256}#{sha256digest}" }
+  let(:sha256destdir) { File.join(bucketdir, "7/1/5/2/3/2/3/b/#{sha256digest}") }
 
   it "defaults to serializing to `:s`" do
     expect(Puppet::FileBucket::File.default_format).to eq(:s)
@@ -58,12 +64,36 @@ describe Puppet::FileBucket::File do
     Puppet::FileBucket::File.new(contents).contents.should == contents
   end
 
-  it "should default to 'md5' as the checksum algorithm if the algorithm is not in the name" do
-    Puppet::FileBucket::File.new(contents).checksum_type.should == "md5"
+  describe "with digest_algorithms = md5" do
+    include_context 'digest_algorithms', 'md5'
+
+    it "should default to 'md5' as the checksum algorithm if the algorithm is not in the name" do
+      Puppet::FileBucket::File.new(contents).checksum_type.should == :md5
+    end
+
+    it "should calculate the MD5 checksum" do
+      Puppet::FileBucket::File.new(contents).checksum.should == checksum
+    end
+
+    it "should return a url-ish name with md5 in it" do
+      Puppet::FileBucket::File.new(contents).name.should == "md5/#{digest}"
+    end
   end
 
-  it "should calculate the checksum" do
-    Puppet::FileBucket::File.new(contents).checksum.should == checksum
+  describe "with digest_algorithms = sha1, sha256" do
+    include_context 'digest_algorithms', 'sha1, sha256'
+
+    it "should default to 'sha1' as the checksum algorithm if the algorithm is not in the name" do
+      Puppet::FileBucket::File.new(contents).checksum_type.should == :sha1
+    end
+
+    it "should calculate the SHA-1 checksum" do
+      Puppet::FileBucket::File.new(contents).checksum.should == sha1checksum
+    end
+
+    it "should return a url-ish name with sha1 in it" do
+      Puppet::FileBucket::File.new(contents).name.should == "sha1/#{sha1digest}"
+    end
   end
 
   describe "when using back-ends" do
@@ -74,10 +104,6 @@ describe Puppet::FileBucket::File do
     it "should have a :save instance method" do
       Puppet::FileBucket::File.indirection.should respond_to(:save)
     end
-  end
-
-  it "should return a url-ish name" do
-    Puppet::FileBucket::File.new(contents).name.should == "md5/#{digest}"
   end
 
   it "should reject a url-ish name with an invalid checksum" do
@@ -95,24 +121,15 @@ describe Puppet::FileBucket::File do
     Puppet::FileBucket::File.from_pson({"contents"=>"file contents"}).contents.should == "file contents"
   end
 
-  def make_bucketed_file
-    FileUtils.mkdir_p(destdir)
-    File.open("#{destdir}/contents", 'wb') { |f| f.write contents }
-  end
 
-  describe "using the indirector's find method" do
-    it "should return nil if a file doesn't exist" do
-      bucketfile = Puppet::FileBucket::File.indirection.find("md5/#{digest}")
-      bucketfile.should == nil
+  describe "with digest_algorithms = md5" do
+    include_context 'digest_algorithms', 'md5'
+    def make_bucketed_file
+      FileUtils.mkdir_p(destdir)
+      File.open("#{destdir}/contents", 'wb') { |f| f.write contents }
     end
 
-    it "should find a filebucket if the file exists" do
-      make_bucketed_file
-      bucketfile = Puppet::FileBucket::File.indirection.find("md5/#{digest}")
-      bucketfile.checksum.should == checksum
-    end
-
-    describe "using RESTish digest notation" do
+    describe "using the indirector's find method" do
       it "should return nil if a file doesn't exist" do
         bucketfile = Puppet::FileBucket::File.indirection.find("md5/#{digest}")
         bucketfile.should == nil
@@ -123,6 +140,53 @@ describe Puppet::FileBucket::File do
         bucketfile = Puppet::FileBucket::File.indirection.find("md5/#{digest}")
         bucketfile.checksum.should == checksum
       end
+      # The "using RESTish notation" tests that used to be here became
+      # redundant in 89f56920.
+    end
+
+    it "should save a bucketed file using the md5 checksum" do
+      fbf = Puppet::FileBucket::File.new contents, :bucket_path => bucketdir
+      t = Puppet::FileBucket::File.indirection.terminus(:file)
+      t.expects(:save_to_disk).once.with(any_parameters) { |a,b,c,d| c.to_s.include? destdir }
+      Puppet::FileBucket::File.indirection.save(fbf)
+    end
+  end
+
+  describe "with digest_algorithms = sha1, sha256" do
+    include_context 'digest_algorithms', 'sha1, sha256'
+    def make_bucketed_file
+      FileUtils.mkdir_p(sha1destdir)
+      FileUtils.mkdir_p(sha256destdir)
+      File.open("#{sha1destdir}/contents", 'wb') { |f| f.write contents }
+      File.open("#{sha256destdir}/contents", 'wb') { |f| f.write contents }
+    end
+
+    describe "using the indirector's find method" do
+      it "should return nil if a file doesn't exist" do
+        bucketfile = Puppet::FileBucket::File.indirection.find("sha1/#{sha1digest}")
+        bucketfile.should == nil
+      end
+
+      it "should find a filebucket if the file exists using sha1" do
+        make_bucketed_file
+        bucketfile = Puppet::FileBucket::File.indirection.find("sha1/#{sha1digest}")
+        bucketfile.checksum.should == sha1checksum
+      end
+
+      it "should find a filebucket if the file exists using sha256" do
+        make_bucketed_file
+        bucketfile = Puppet::FileBucket::File.indirection.find("sha256/#{sha256digest}")
+        # Is this really weird? Will it break things?
+        bucketfile.checksum.should == sha1checksum
+      end
+    end
+
+    it "should save a bucketed file using both the sha1 and sha256 checksums" do
+      fbf = Puppet::FileBucket::File.new contents, :bucket_path => bucketdir
+      t = Puppet::FileBucket::File.indirection.terminus(:file)
+      t.expects(:save_to_disk).once.with(any_parameters) { |a,b,c,d| c.to_s.include? sha1destdir }
+      t.expects(:save_to_disk).once.with(any_parameters) { |a,b,c,d| c.to_s.include? sha256destdir }
+      Puppet::FileBucket::File.indirection.save(fbf)
     end
   end
 end
